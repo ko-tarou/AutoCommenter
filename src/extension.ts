@@ -30,7 +30,9 @@ export function activate(context: vscode.ExtensionContext) {
             const currentLine = lastChange.range.start.line + 1; // カーソルが移動した行（改行後の新しい行）
             console.log(`Cursor on line (after newline): ${currentLine}`);
 
-            // 空白行の条件をチェック
+            const commentSymbol = document.languageId === 'python' ? '#' : '//'; // 言語に応じたコメント記号
+
+            // 空白行の条件をチェックしてコメントを挿入
             if (
                 currentLine >= 2 && // 少なくとも3行目にいること
                 document.lineAt(currentLine - 1).isEmptyOrWhitespace &&
@@ -38,7 +40,6 @@ export function activate(context: vscode.ExtensionContext) {
             ) {
                 console.log('Condition met: Previous 2 lines are empty');
                 const position = new vscode.Position(currentLine, 0); // コメントを挿入する位置
-                const commentSymbol = document.languageId === 'python' ? '#' : '//'; // 言語に応じたコメント記号
                 const commentText = `${commentSymbol}`; // 挿入するコメント
 
                 editor.edit(editBuilder => {
@@ -46,6 +47,19 @@ export function activate(context: vscode.ExtensionContext) {
                 });
             } else {
                 console.log('Condition not met: Previous 2 lines are not empty');
+            }
+
+            // 前の行のコメントを削除（コメントのみの場合）
+            const previousLine = currentLine - 1;
+            const previousLineText = document.lineAt(previousLine).text.trim();
+
+            if (previousLineText === commentSymbol) {
+                console.log(`Removing comment on line ${previousLine}`);
+                const range = document.lineAt(previousLine).range;
+
+                editor.edit(editBuilder => {
+                    editBuilder.delete(range); // コメントのみの行を削除
+                });
             }
         } else {
             console.log('Change is not a newline insertion');
