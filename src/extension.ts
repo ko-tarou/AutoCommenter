@@ -3,74 +3,52 @@ import * as vscode from 'vscode';
 export function activate(context: vscode.ExtensionContext) {
     console.log('AutoCommenter is now active!');
 
-    // コマンド登録（デバッグ用にコマンドパレットからも実行可能）
-    let disposable = vscode.commands.registerCommand('autoCommenter.autoComment', async () => {
-        console.log('Auto Comment command executed');
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            console.log('No active editor found');
-            return; // エディタが開かれていない場合は処理しない
-        }
-
-        const document = editor.document;
-        const selection = editor.selection;
-
-        // 現在の行のインデックスを取得
-        const line = selection.active.line;
-        console.log(`Current line: ${line}`);
-
-        // 空白の3行を確認
-        if (
-            line >= 2 && 
-            document.lineAt(line).isEmptyOrWhitespace &&
-            document.lineAt(line - 1).isEmptyOrWhitespace &&
-            document.lineAt(line - 2).isEmptyOrWhitespace
-        ) {
-            console.log('Condition met: 3 empty lines detected');
-            const position = new vscode.Position(line, 0); // コメントを挿入する位置
-            const commentSymbol = document.languageId === 'python' ? '#' : '//'; // 言語によるコメント文字
-            const commentText = `${commentSymbol}`;
-
-            // コメントを挿入
-            await editor.edit(editBuilder => {
-                editBuilder.insert(position, commentText + '\n');
-            });
-        } else {
-            console.log('Condition not met: 3 empty lines not detected');
-        }
-    });
-
-    context.subscriptions.push(disposable);
-
-    // テキスト変更イベントの監視
     vscode.workspace.onDidChangeTextDocument(event => {
         console.log('Text document changed!');
         const editor = vscode.window.activeTextEditor;
+
         if (!editor || event.document !== editor.document) {
             console.log('No active editor or document mismatch');
-            return; // 編集中のエディタとドキュメントが一致しない場合は無視
+            return; // アクティブエディタがない、または変更されたドキュメントが現在のエディタのものではない場合は無視
         }
 
-        const line = editor.selection.active.line; // 現在のカーソル位置の行を取得
-        const document = editor.document;
-        console.log(`Cursor on line: ${line}`);
+        // 変更箇所をチェック
+        const changes = event.contentChanges;
+        if (changes.length === 0) {
+            console.log('No content changes detected');
+            return;
+        }
 
-        if (
-            line >= 2 && // 行数が3行以上であること
-            document.lineAt(line).isEmptyOrWhitespace &&
-            document.lineAt(line - 1).isEmptyOrWhitespace &&
-            document.lineAt(line - 2).isEmptyOrWhitespace
-        ) {
-            console.log('Condition met: 3 consecutive empty lines');
-            const position = new vscode.Position(line, 0); // コメントを挿入する位置
-            const commentSymbol = document.languageId === 'python' ? '#' : '//'; // 言語に応じたコメント文字
-            const commentText = `${commentSymbol}`;
+        const lastChange = changes[changes.length - 1];
+        console.log(`Last change text: '${lastChange.text}'`);
 
-            editor.edit(editBuilder => {
-                editBuilder.insert(position, commentText + '\n'); // コメントを挿入
-            });
+        // 改行挿入の検出（改行コードに対応: '\n' または '\r\n'）
+        if (lastChange.text === '\n' || lastChange.text === '\r\n') {
+            const document = editor.document;
+
+            // 改行により新たに移動する行を計算
+            const currentLine = lastChange.range.start.line + 1; // カーソルが移動した行（改行後の新しい行）
+            console.log(`Cursor on line (after newline): ${currentLine}`);
+
+            // 空白行の条件をチェック
+            if (
+                currentLine >= 2 && // 少なくとも3行目にいること
+                document.lineAt(currentLine - 1).isEmptyOrWhitespace &&
+                document.lineAt(currentLine - 2).isEmptyOrWhitespace
+            ) {
+                console.log('Condition met: Previous 2 lines are empty');
+                const position = new vscode.Position(currentLine, 0); // コメントを挿入する位置
+                const commentSymbol = document.languageId === 'python' ? '#' : '//'; // 言語に応じたコメント記号
+                const commentText = `${commentSymbol}`; // 挿入するコメント
+
+                editor.edit(editBuilder => {
+                    editBuilder.insert(position, commentText); // コメントを挿入
+                });
+            } else {
+                console.log('Condition not met: Previous 2 lines are not empty');
+            }
         } else {
-            console.log('Condition not met: Less than 3 consecutive empty lines');
+            console.log('Change is not a newline insertion');
         }
     });
 }
